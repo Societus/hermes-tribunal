@@ -31,7 +31,7 @@ from . import config
 #: Uses a tempered greedy token to skip over quoted strings
 #: (so "]" inside depends="[]" does not end the match early).
 _MARKER_RE = re.compile(
-    r'\[TRIBUNAL:(ASSIGN|PROGRESS|DONE|BLOCK|FAIL)\s+((?:[^"\]]|"[^"]*")*)\]'
+    r'\[TRIBUNAL:(ASSIGN|PROGRESS|DONE|BLOCK|FAIL|HELLO)\s+((?:[^"\]]|"[^"]*")*)\]'
 )
 
 #: Matches key="value with spaces" or key=nowhitespace
@@ -159,6 +159,52 @@ def format_fail(
     )
 
 
+def format_hello(
+    agent: str,
+    role: str,
+    capabilities: str = "",
+    roster: dict[str, str] | None = None,
+) -> str:
+    """Format a HELLO marker.
+
+    Emitted when an agent first activates in a tribunal room.
+    Can optionally include a roster of all participants, which is the
+    preferred first-use pattern (orchestrator declares everyone at once).
+
+    roster is {agent_name: role, ...}. If omitted, only the emitting
+    agent is registered (standalone HELLO for late joins).
+    """
+    parts = f"[TRIBUNAL:HELLO agent={agent} role={role}"
+    if capabilities:
+        parts += f" capabilities={_esc(capabilities)}"
+    if roster:
+        # Format: "name:role,name:role,..." consistent with depends= style
+        roster_str = ",".join(f"{name}:{r}" for name, r in roster.items())
+        parts += f" roster={_esc(roster_str)}"
+    return parts + "]"
+
+
+def parse_roster(roster_str: str) -> list[dict[str, str]]:
+    """Parse a roster string into a list of {agent_name, role} dicts.
+
+    Format: "name:role,name:role,..."
+    Entries without a colon default to role='worker'.
+    """
+    if not roster_str:
+        return []
+    entries: list[dict[str, str]] = []
+    for part in roster_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            name, role = part.split(":", 1)
+            entries.append({"agent_name": name.strip(), "role": role.strip()})
+        else:
+            entries.append({"agent_name": part.strip(), "role": "worker"})
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # High-level helpers
 # ---------------------------------------------------------------------------
@@ -175,7 +221,8 @@ def extract_task_updates(text: str) -> list[dict[str, Any]]:
     """Parse markers and return a list of task-update dicts.
 
     Each dict has at least: type, id, agent.
-    Depending on type, additional keys: goal, depends, note, result, reason.
+    Depending on type, additional keys: goal, depends, note, result, reason,
+    role, capabilities.
     """
     markers = parse_markers(text)
     updates: list[dict[str, Any]] = []
@@ -196,5 +243,10 @@ def extract_task_updates(text: str) -> list[dict[str, Any]]:
             entry["reason"] = m.get("reason", "")
         elif m["type"] == "FAIL":
             entry["reason"] = m.get("reason", "")
+        elif m["type"] == "HELLO":
+            entry["role"] = m.get("role", "worker")
+            entry["capabilities"] = m.get("capabilities", "")
+            roster_raw = m.get("roster", "")
+            entry["roster"] = parse_roster(roster_raw)
         updates.append(entry)
     return updates

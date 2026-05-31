@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS known_bots (
     bot_name    TEXT    NOT NULL DEFAULT '',
     PRIMARY KEY (platform, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS room_state (
+    chat_key    TEXT    PRIMARY KEY,
+    status      TEXT    NOT NULL DEFAULT 'inactive',
+    activated_by TEXT   NOT NULL DEFAULT '',
+    activated_at REAL   NOT NULL DEFAULT 0,
+    updated_at  REAL    NOT NULL DEFAULT 0
+);
 """
 
 
@@ -410,3 +418,64 @@ def bot_remember(
         conn.commit()
     except sqlite3.Error:
         logger.exception("bot_remember failed")
+
+
+# ---------------------------------------------------------------------------
+# Room state (activation tracking)
+# ---------------------------------------------------------------------------
+
+def room_get_state(
+    conn: sqlite3.Connection,
+    chat_key: str,
+) -> str:
+    """Return the tribunal state for a room: 'inactive', 'active', or 'suspended'.
+
+    Returns 'inactive' for rooms with no row.
+    """
+    row = conn.execute(
+        "SELECT status FROM room_state WHERE chat_key = ?",
+        (chat_key,),
+    ).fetchone()
+    return row[0] if row else "inactive"
+
+
+def room_activate(
+    conn: sqlite3.Connection,
+    chat_key: str,
+    activated_by: str = "",
+) -> None:
+    """Mark a room as tribunal-active.
+
+    Sets status='active' and records who activated it and when.
+    """
+    now = time.time()
+    try:
+        conn.execute(
+            "INSERT INTO room_state (chat_key, status, activated_by, activated_at, updated_at) "
+            "VALUES (?, 'active', ?, ?, ?) "
+            "ON CONFLICT(chat_key) DO UPDATE SET "
+            "  status='active', activated_by=excluded.activated_by, "
+            "  activated_at=excluded.activated_at, updated_at=excluded.updated_at",
+            (chat_key, activated_by, now, now),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        logger.exception("room_activate failed for %s", chat_key)
+
+
+def room_deactivate(
+    conn: sqlite3.Connection,
+    chat_key: str,
+) -> None:
+    """Suspend tribunal in a room (sets status='suspended')."""
+    now = time.time()
+    try:
+        conn.execute(
+            "INSERT INTO room_state (chat_key, status, updated_at) "
+            "VALUES (?, 'suspended', ?) "
+            "ON CONFLICT(chat_key) DO UPDATE SET status='suspended', updated_at=?",
+            (chat_key, now, now),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        logger.exception("room_deactivate failed for %s", chat_key)

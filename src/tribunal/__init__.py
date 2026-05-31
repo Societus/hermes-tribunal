@@ -5,7 +5,12 @@ Registers three Hermes plugin hooks:
   - pre_llm_call: context assembler (inject history + tasks)
   - post_llm_call: persistence (write to local SQLite)
 
+Plus one command hook:
+  - command:tribunal: first-use setup and room management
+
 DMs are never intercepted. Only room messages are processed.
+Rooms are inactive by default -- tribunal dispatch activates when
+a HELLO or ASSIGN marker is observed.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ def register(ctx: dict[str, Any] | None = None) -> dict[str, Any]:
         "pre_gateway_dispatch": _on_pre_gateway_dispatch,
         "pre_llm_call": _on_pre_llm_call,
         "post_llm_call": _on_post_llm_call,
+        "command:tribunal": _on_command_tribunal,
     }
 
 
@@ -51,3 +57,9 @@ def _on_post_llm_call(**kwargs) -> None:
     """Persistence: write response to local SQLite."""
     from .hooks.persist import handle
     return handle(**kwargs)
+
+
+def _on_command_tribunal(**kwargs) -> dict[str, str] | None:
+    """Slash command: first-use setup and room management."""
+    from .hooks.commands import handle_tribunal_command
+    return handle_tribunal_command(**kwargs)

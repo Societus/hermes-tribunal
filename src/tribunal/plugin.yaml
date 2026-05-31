@@ -1,11 +1,14 @@
 name: tribunal
-version: 0.1.0
+version: 0.2.0
 description: >
   Multi-agent collaboration via chat-room message bus. Coordinates work
   across agents on separate machines using structured protocol messages.
   Operates in rooms only; DMs pass through untouched.
+  Rooms start inactive -- tribunal activates when a HELLO or ASSIGN
+  marker is observed, or via the /tribunal command.
 author: "Societus"
 hooks:
   - pre_gateway_dispatch
   - pre_llm_call
   - post_llm_call
+  - command:tribunal

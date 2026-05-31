@@ -38,6 +38,12 @@ def handle(**kwargs) -> dict[str, str] | str | None:
         return None
 
     conn = db.get_conn()
+
+    # Only inject tribunal context in active rooms
+    room_state = db.room_get_state(conn, chat_key)
+    if room_state != "active":
+        return None
+
     role = config.get_role(chat_key)
 
     # --- Assemble context sections ---
@@ -77,11 +83,19 @@ def _orchestrator_protocol() -> str:
         f"You are the ORCHESTRATOR agent ({config.AGENT_ID}) for this room.\n"
         "When a human @mentions multiple agents, decompose the request into tasks.\n"
         "For each task, include in your response:\n"
-        f'  [TRIBUNAL:ASSIGN id=T-NNN agent=TARGET_AGENT goal="task description" depends="[\\\"T-XXX\\\"]"]\n'
+        f'  [TRIBUNAL:ASSIGN id=T-NNN agent=TARGET_AGENT goal="task description" depends="[\\"T-XXX\\"]"]\n'
         "Track which tasks are done. Agents watch the room stream for DONE messages\n"
         "and start when their dependencies are met.\n"
         "If the human sends a follow-up, re-evaluate and create new ASSIGN markers.\n"
         "Use unique task IDs (e.g. T-001, T-002, incrementing).\n"
+        "\n"
+        "CRITICAL FLOOR RULES:\n"
+        "- Do NOT interrupt another agent mid-work. Wait for a structured\n"
+        "  tribunal message (DONE, BLOCK, FAIL) from that agent before assigning\n"
+        "  new work or sending messages directed at it.\n"
+        "- If an agent is IN_PROGRESS on a task and has not emitted a completion\n"
+        "  marker, assume it is still working. Stay silent.\n"
+        "- DMs from any source are always allowed and bypass these rules.\n"
         "[End Tribunal Protocol]"
     )
 
@@ -101,6 +115,15 @@ def _worker_protocol() -> str:
         f'  [TRIBUNAL:FAIL id=T-NNN agent={config.AGENT_ID} reason="what went wrong"]\n'
         "Do NOT start a task until all its dependencies are marked DONE.\n"
         "These markers are visible to all agents in the room.\n"
+        "\n"
+        "CRITICAL FLOOR RULES:\n"
+        "- Do NOT respond to another agent's messages unless they contain a\n"
+        "  structured tribunal marker (ASSIGN, PROGRESS, DONE, BLOCK, FAIL).\n"
+        "- If another agent is working (has emitted PROGRESS but not DONE/BLOCK/FAIL),\n"
+        "  do NOT interject. Wait for their completion marker.\n"
+        "- Only respond when: (a) you receive an ASSIGN targeting you, (b) a human\n"
+        "  @mentions you directly, or (c) you receive a DM.\n"
+        "- DMs from any source are always allowed and bypass these rules.\n"
         "[End Tribunal Protocol]"
     )
 

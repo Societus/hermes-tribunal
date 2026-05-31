@@ -44,6 +44,11 @@ BOT_NAME: str = _env("TRIBUNAL_BOT_NAME") or AGENT_ID
 #: Default role for this agent: "worker" or "orchestrator".
 ROLE: str = _env("TRIBUNAL_ROLE") or "worker"
 
+#: Default behavior for inactive rooms. When "silent", the agent only
+#: responds to DMs and explicit @mentions in rooms where tribunal has
+#: not been activated. When "passive", it follows Hermes core routing.
+INACTIVE_ROOM_MODE: str = _env("TRIBUNAL_INACTIVE_MODE") or "silent"
+
 #: Per-room role overrides. Format: "chat_key=role,chat_key=role"
 ROOM_ROLES_STR: str = _env("TRIBUNAL_ROOM_ROLES")
 
@@ -104,7 +109,7 @@ DISABLED_PLATFORMS: set[str] = {
 # ---------------------------------------------------------------------------
 
 TRIBUNAL_MARKER = "[TRIBUNAL:"
-TRIBUNAL_TYPES = frozenset({"ASSIGN", "PROGRESS", "DONE", "BLOCK", "FAIL"})
+TRIBUNAL_TYPES = frozenset({"ASSIGN", "PROGRESS", "DONE", "BLOCK", "FAIL", "HELLO"})
 
 # ---------------------------------------------------------------------------
 # Logging
