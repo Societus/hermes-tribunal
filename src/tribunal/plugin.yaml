@@ -1,0 +1,11 @@
+name: tribunal
+version: 0.1.0
+description: >
+  Multi-agent collaboration via chat-room message bus. Coordinates work
+  across agents on separate machines using structured protocol messages.
+  Operates in rooms only; DMs pass through untouched.
+author: "Societus"
+hooks:
+  - pre_gateway_dispatch
+  - pre_llm_call
+  - post_llm_call
